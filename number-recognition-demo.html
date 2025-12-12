@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Number Recognition Demo</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.11.0"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.0"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/knn-classifier@1.2.4"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: white;
+            min-height: 100vh;
+            margin: 0;
+            padding: 0;
+        }
+
+        .container {
+            background: white;
+            padding: 15px;
+            width: 100%;
+            height: 100vh;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            overflow: hidden;
+        }
+
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+
+        .video-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: #000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        video {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            display: block;
+        }
+
+        .controls-column {
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+            min-height: 0;
+        }
+
+        .mode-toggle {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin-bottom: 20px;
+        }
+
+        .mode-btn {
+            padding: 12px 30px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            background: #e0e0e0;
+            color: #666;
+        }
+
+        .mode-btn.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        .mode-btn:hover:not(.active) {
+            background: #d0d0d0;
+        }
+
+        .training-panel, .recognition-panel {
+            display: none;
+        }
+
+        .training-panel.active, .recognition-panel.active {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            overflow-y: auto;
+            min-height: 0;
+        }
+
+        .number-buttons {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .number-btn {
+            padding: 20px;
+            border: 2px solid #667eea;
+            border-radius: 8px;
+            font-size: 24px;
+            font-weight: bold;
+            cursor: pointer;
+            background: white;
+            transition: all 0.2s;
+            position: relative;
+        }
+
+        .number-btn:hover {
+            background: #f0f0ff;
+            transform: scale(1.05);
+        }
+
+        .number-btn:active {
+            transform: scale(0.95);
+        }
+
+        .number-btn .count {
+            position: absolute;
+            top: 5px;
+            right: 8px;
+            background: #667eea;
+            color: white;
+            border-radius: 10px;
+            padding: 2px 6px;
+            font-size: 12px;
+            font-weight: normal;
+        }
+
+        .train-btn {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 18px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-bottom: 10px;
+        }
+
+        .train-btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(17, 153, 142, 0.4);
+        }
+
+        .train-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .status {
+            text-align: center;
+            padding: 10px;
+            background: #f5f5f5;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            font-size: 14px;
+            color: #666;
+        }
+
+        .status.training {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .prediction-display {
+            text-align: center;
+            padding: 30px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 10px;
+            color: white;
+            margin-bottom: 20px;
+        }
+
+        .predicted-number {
+            font-size: 72px;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+
+        .confidence {
+            font-size: 18px;
+            opacity: 0.9;
+        }
+
+        .predictions-list {
+            background: #f5f5f5;
+            border-radius: 8px;
+            padding: 15px;
+        }
+
+        .prediction-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px solid #ddd;
+        }
+
+        .prediction-item:last-child {
+            border-bottom: none;
+        }
+
+        .prediction-label {
+            font-weight: 600;
+            color: #333;
+        }
+
+        .prediction-bar {
+            flex: 1;
+            margin: 0 15px;
+            height: 20px;
+            background: #e0e0e0;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .prediction-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            transition: width 0.3s;
+            border-radius: 10px;
+        }
+
+        .prediction-value {
+            font-weight: 600;
+            color: #666;
+            min-width: 50px;
+            text-align: right;
+        }
+
+        .flash {
+            animation: flash 0.3s;
+        }
+
+        @keyframes flash {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="video-container">
+            <video id="video" autoplay playsinline></video>
+        </div>
+
+        <div class="controls-column">
+            <div class="mode-toggle">
+                <button class="mode-btn active" id="trainModeBtn">Training Mode</button>
+                <button class="mode-btn" id="recognizeModeBtn">Recognition Mode</button>
+            </div>
+
+            <div class="training-panel active">
+                <div class="status" id="trainStatus">Click a number button to capture training images</div>
+
+                <div class="number-buttons" id="numberButtons">
+                    <!-- Number buttons will be generated here -->
+                </div>
+
+                <button class="train-btn" id="trainModelBtn" disabled>Train Model</button>
+            </div>
+
+            <div class="recognition-panel">
+                <div class="status" id="recognizeStatus">Train the model first</div>
+
+                <div class="prediction-display">
+                    <div class="predicted-number" id="predictedNumber">-</div>
+                    <div class="confidence" id="confidence">Waiting for prediction...</div>
+                </div>
+
+                <div class="predictions-list" id="predictionsList">
+                    <!-- Predictions will be displayed here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let video;
+        let mobilenet;
+        let classifier;
+        let trainingData = {};
+        let isModelTrained = false;
+        let isPredicting = false;
+        let lastSpokenNumber = null;
+
+        // Initialize
+        async function init() {
+            video = document.getElementById('video');
+
+            // Set up number buttons (0-9)
+            const numberButtons = document.getElementById('numberButtons');
+            for (let i = 0; i < 10; i++) {
+                const btn = document.createElement('button');
+                btn.className = 'number-btn';
+                btn.innerHTML = `${i}<span class="count" id="count-${i}">0</span>`;
+                btn.onclick = () => captureForNumber(i);
+                numberButtons.appendChild(btn);
+                trainingData[i] = 0;
+            }
+
+            // Set up mode toggle
+            document.getElementById('trainModeBtn').onclick = () => switchMode('training');
+            document.getElementById('recognizeModeBtn').onclick = () => switchMode('recognition');
+            document.getElementById('trainModelBtn').onclick = () => {
+                isModelTrained = true;
+                const numbersWithData = Object.keys(trainingData).filter(key => trainingData[key] > 0);
+                updateStatus(`Model ready with numbers: ${numbersWithData.join(', ')}. Switch to Recognition Mode!`, 'training');
+                document.getElementById('recognizeModeBtn').disabled = false;
+            };
+
+            // Start camera
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: 'user' },
+                    audio: false
+                });
+                video.srcObject = stream;
+
+                // Wait for video to be ready
+                await new Promise(resolve => {
+                    video.onloadedmetadata = () => {
+                        resolve();
+                    };
+                });
+
+                // Initialize TensorFlow.js KNN Classifier and MobileNet
+                updateStatus('Loading MobileNet model...', 'training');
+                classifier = knnClassifier.create();
+                mobilenet = await window.mobilenet.load();
+
+                updateStatus('Model loaded! Click a number button to capture training images', 'training');
+
+            } catch (err) {
+                console.error('Error accessing camera:', err);
+                showError('Could not access camera. Please grant camera permissions.');
+            }
+        }
+
+        async function captureForNumber(number) {
+            if (!mobilenet) {
+                showError('Model not ready yet');
+                return;
+            }
+
+            // Visual feedback
+            video.parentElement.classList.add('flash');
+            setTimeout(() => video.parentElement.classList.remove('flash'), 300);
+
+            // Get the activation from mobilenet
+            const activation = mobilenet.infer(video, 'conv_preds');
+
+            // Add the example to the classifier
+            classifier.addExample(activation, number);
+            trainingData[number]++;
+
+            // Update count display
+            document.getElementById(`count-${number}`).textContent = trainingData[number];
+
+            // Update status
+            const totalImages = Object.values(trainingData).reduce((a, b) => a + b, 0);
+            updateStatus(`Captured ${totalImages} images. Click more numbers or train the model.`, 'training');
+
+            // Enable train button if we have any data
+            if (totalImages >= 1) {
+                document.getElementById('trainModelBtn').disabled = false;
+            }
+        }
+
+        function switchMode(mode) {
+            // Stop prediction if switching away from recognition
+            if (mode === 'training') {
+                isPredicting = false;
+            }
+
+            // Update UI
+            document.querySelectorAll('.mode-btn').forEach(btn => btn.classList.remove('active'));
+            document.querySelector('.training-panel').classList.remove('active');
+            document.querySelector('.recognition-panel').classList.remove('active');
+
+            if (mode === 'training') {
+                document.getElementById('trainModeBtn').classList.add('active');
+                document.querySelector('.training-panel').classList.add('active');
+            } else {
+                document.getElementById('recognizeModeBtn').classList.add('active');
+                document.querySelector('.recognition-panel').classList.add('active');
+
+                if (isModelTrained) {
+                    updateStatus('Recognition active', 'recognition');
+                    startPredicting();
+                } else {
+                    updateStatus('Please train the model first in Training Mode', 'recognition');
+                }
+            }
+        }
+
+        async function startPredicting() {
+            if (!isModelTrained) return;
+
+            isPredicting = true;
+            predictLoop();
+        }
+
+        async function predictLoop() {
+            if (!isPredicting) return;
+
+            try {
+                // Make sure video is ready
+                if (video.readyState === video.HAVE_ENOUGH_DATA && classifier.getNumClasses() > 0) {
+                    const activation = mobilenet.infer(video, 'conv_preds');
+                    const result = await classifier.predictClass(activation);
+
+                    // Convert to format expected by displayPredictions
+                    const results = Object.keys(result.confidences).map(label => ({
+                        label: label,
+                        confidence: result.confidences[label]
+                    }));
+
+                    // Sort by confidence descending
+                    results.sort((a, b) => b.confidence - a.confidence);
+
+                    displayPredictions(results);
+                }
+
+                // Continue prediction loop
+                requestAnimationFrame(predictLoop);
+            } catch (err) {
+                console.error('Prediction error:', err);
+            }
+        }
+
+        function displayPredictions(results) {
+            if (!results || results.length === 0) return;
+
+            // Display top prediction
+            const topPrediction = results[0];
+            document.getElementById('predictedNumber').textContent = topPrediction.label;
+            document.getElementById('confidence').textContent =
+                `Confidence: ${(topPrediction.confidence * 100).toFixed(1)}%`;
+
+            // Speak the number if it changed and has high confidence
+            if (topPrediction.label !== lastSpokenNumber && topPrediction.confidence > 0.7) {
+                lastSpokenNumber = topPrediction.label;
+                const utterance = new SpeechSynthesisUtterance(topPrediction.label);
+                utterance.rate = 1.0;
+                window.speechSynthesis.speak(utterance);
+            }
+
+            // Display all predictions as bars
+            const predictionsList = document.getElementById('predictionsList');
+            predictionsList.innerHTML = '';
+
+            // Sort by label number
+            results.sort((a, b) => parseInt(a.label) - parseInt(b.label));
+
+            results.forEach(result => {
+                const item = document.createElement('div');
+                item.className = 'prediction-item';
+                item.innerHTML = `
+                    <span class="prediction-label">${result.label}</span>
+                    <div class="prediction-bar">
+                        <div class="prediction-fill" style="width: ${result.confidence * 100}%"></div>
+                    </div>
+                    <span class="prediction-value">${(result.confidence * 100).toFixed(1)}%</span>
+                `;
+                predictionsList.appendChild(item);
+            });
+        }
+
+        function updateStatus(message, mode, isTraining = false) {
+            const statusEl = mode === 'training' ?
+                document.getElementById('trainStatus') :
+                document.getElementById('recognizeStatus');
+
+            statusEl.textContent = message;
+            statusEl.className = 'status' + (isTraining ? ' training' : '');
+        }
+
+        function showError(message) {
+            const container = document.querySelector('.container');
+            const error = document.createElement('div');
+            error.className = 'error';
+            error.textContent = message;
+            container.insertBefore(error, container.firstChild);
+
+            setTimeout(() => error.remove(), 5000);
+        }
+
+        // Start the app
+        init();
+    </script>
+</body>
+</html>
