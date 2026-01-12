@@ -348,6 +348,16 @@
                 document.getElementById('recognizeModeBtn').disabled = false;
             };
 
+            // Set up keyboard bindings for number keys
+            document.addEventListener('keydown', (event) => {
+                // Check if it's a number key (0-9) and we're in training mode
+                if (event.key >= '0' && event.key <= '9' && document.querySelector('.training-panel').classList.contains('active')) {
+                    event.preventDefault();
+                    const number = parseInt(event.key);
+                    captureForNumber(number);
+                }
+            });
+
             // Start camera
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({
